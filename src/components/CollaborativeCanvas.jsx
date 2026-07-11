@@ -5,6 +5,7 @@ function CollaborativeCanvas({ color = "#ff4500", isEraser = false }) {
   const socketRef = useRef(null);
 
   const [isDrawing, setIsDrawing] = useState(false);
+  const [history, setHistory] = useState([]);
   const lastPoint = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
@@ -18,7 +19,7 @@ function CollaborativeCanvas({ color = "#ff4500", isEraser = false }) {
     return () => socketRef.current.close();
   }, []);
 
-  //core drawing functions
+  // ---- drawing core -------------------------------------------------
   const drawLine = (x1, y1, x2, y2, color = "#000000", emit = true) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -33,23 +34,31 @@ function CollaborativeCanvas({ color = "#ff4500", isEraser = false }) {
     ctx.stroke();
     ctx.closePath();
 
-    // Broadcast your movements to the server
     if (emit && socketRef.current?.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify({ x1, y1, x2, y2, color }));
     }
   };
 
-  //local pointer event handler
+  // ---- snapshot handling -------------------------------------------
+  const saveState = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    setHistory((prev) => [...prev, imageData]);
+  };
+
+  // ---- event handlers -----------------------------------------------
   const startDrawing = (e) => {
     const { offsetX, offsetY } = e.nativeEvent;
     lastPoint.current = { x: offsetX, y: offsetY };
     setIsDrawing(true);
+    saveState(); // save before we start drawing
   };
 
   const draw = (e) => {
     if (!isDrawing) return;
     const { offsetX, offsetY } = e.nativeEvent;
-
     const drawColor = isEraser ? "#ffffff" : color;
 
     drawLine(
@@ -64,17 +73,36 @@ function CollaborativeCanvas({ color = "#ff4500", isEraser = false }) {
     lastPoint.current = { x: offsetX, y: offsetY };
   };
 
-  const stopDrawing = () => {
-    setIsDrawing(false);
-  };
+  const stopDrawing = () => setIsDrawing(false);
 
   const clearCanvas = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setHistory([]);
   };
 
+  const undoLine = () => {
+    if (history.length === 0) return;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+
+    // pop the latest state (the current canvas)
+    const newHistory = history.slice(0, -1);
+    setHistory(newHistory);
+
+    // restore to the new top of stack, or clear if empty
+    if (newHistory.length > 0) {
+      ctx.putImageData(newHistory[newHistory.length - 1], 0, 0);
+    } else {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+  };
+
+  // ---- render -------------------------------------------------------
   return (
     <div
       style={{
@@ -99,20 +127,37 @@ function CollaborativeCanvas({ color = "#ff4500", isEraser = false }) {
         onMouseUp={stopDrawing}
         onMouseLeave={stopDrawing}
       />
-      <button
-        onClick={clearCanvas}
-        style={{
-          padding: "8px 16px",
-          fontSize: "14px",
-          cursor: "pointer",
-          backgroundColor: "#ff4500",
-          color: "#fff",
-          border: "none",
-          borderRadius: "4px",
-        }}
-      >
-        Clear Canvas
-      </button>
+      <div style={{ display: "flex", gap: "10px" }}>
+        <button
+          onClick={clearCanvas}
+          style={{
+            padding: "8px 16px",
+            fontSize: "14px",
+            cursor: "pointer",
+            backgroundColor: "#ff4500",
+            color: "#fff",
+            border: "none",
+            borderRadius: "4px",
+          }}
+        >
+          Clear Canvas
+        </button>
+
+        <button
+          onClick={undoLine}
+          style={{
+            padding: "8px 16px",
+            fontSize: "14px",
+            cursor: "pointer",
+            backgroundColor: "#1e90ff",
+            color: "#fff",
+            border: "none",
+            borderRadius: "4px",
+          }}
+        >
+          Undo
+        </button>
+      </div>
     </div>
   );
 }
