@@ -12,5 +12,31 @@
   "dependencies": {
     "nodemon": "^3.1.14",
     "websocket": "^1.0.35"
-  }
+  },
+
+    "services": {
+        "frontend": {
+            "root": ".",
+            "framework": "vite"
+        },
+        "backend": {
+            "root": "backend"
+        }
+    },
+    "rewrites": [
+        {
+            "source": "/api(/.*)?",
+            "destination": {
+                "type": "service",
+                "service": "backend"
+            }
+        },
+        {
+            "source": "/(.*)",
+            "destination": {
+                "type": "service",
+                "service": "frontend"
+            }
+        }
+    ]
 }
