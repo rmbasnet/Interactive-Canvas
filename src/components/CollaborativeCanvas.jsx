@@ -5,7 +5,8 @@ function CollaborativeCanvas({ color = "#ff4500", isEraser = false }) {
   const socketRef = useRef(null);
 
   const [isDrawing, setIsDrawing] = useState(false);
-  const [history, setHistory] = useState([]);
+  const undoStackRef = useRef([]);
+  const redoStackRef = useRef([]);
   const lastPoint = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
@@ -40,20 +41,41 @@ function CollaborativeCanvas({ color = "#ff4500", isEraser = false }) {
   };
 
   // ---- snapshot handling -------------------------------------------
-  const saveState = () => {
+  const getCanvasSnapshot = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const ctx = canvas.getContext("2d");
+    return ctx.getImageData(0, 0, canvas.width, canvas.height);
+  };
+
+  const restoreSnapshot = (snapshot) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    setHistory((prev) => [...prev, imageData]);
+
+    if (snapshot) {
+      ctx.putImageData(snapshot, 0, 0);
+    } else {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+  };
+
+  const saveState = () => {
+    const snapshot = getCanvasSnapshot();
+    if (!snapshot) return;
+
+    undoStackRef.current = [...undoStackRef.current, snapshot];
+    redoStackRef.current = [];
   };
 
   // ---- event handlers -----------------------------------------------
   const startDrawing = (e) => {
+    if (isDrawing) return;
+
     const { offsetX, offsetY } = e.nativeEvent;
     lastPoint.current = { x: offsetX, y: offsetY };
     setIsDrawing(true);
-    saveState(); // save before we start drawing
+    saveState(); // save the state before the current stroke begins
   };
 
   const draw = (e) => {
@@ -80,26 +102,37 @@ function CollaborativeCanvas({ color = "#ff4500", isEraser = false }) {
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    setHistory([]);
+    undoStackRef.current = [];
+    redoStackRef.current = [];
   };
 
   const undoLine = () => {
-    if (history.length === 0) return;
+    if (undoStackRef.current.length === 0) return;
 
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
+    const currentSnapshot = getCanvasSnapshot();
+    const previousSnapshot =
+      undoStackRef.current[undoStackRef.current.length - 1];
 
-    // pop the latest state (the current canvas)
-    const newHistory = history.slice(0, -1);
-    setHistory(newHistory);
-
-    // restore to the new top of stack, or clear if empty
-    if (newHistory.length > 0) {
-      ctx.putImageData(newHistory[newHistory.length - 1], 0, 0);
-    } else {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (currentSnapshot) {
+      redoStackRef.current = [...redoStackRef.current, currentSnapshot];
     }
+
+    undoStackRef.current = undoStackRef.current.slice(0, -1);
+    restoreSnapshot(previousSnapshot);
+  };
+
+  const redoLine = () => {
+    if (redoStackRef.current.length === 0) return;
+
+    const currentSnapshot = getCanvasSnapshot();
+    const nextSnapshot = redoStackRef.current[redoStackRef.current.length - 1];
+
+    if (currentSnapshot) {
+      undoStackRef.current = [...undoStackRef.current, currentSnapshot];
+    }
+
+    redoStackRef.current = redoStackRef.current.slice(0, -1);
+    restoreSnapshot(nextSnapshot);
   };
 
   // ---- render -------------------------------------------------------
@@ -156,6 +189,21 @@ function CollaborativeCanvas({ color = "#ff4500", isEraser = false }) {
           }}
         >
           Undo
+        </button>
+
+        <button
+          onClick={redoLine}
+          style={{
+            padding: "8px 16px",
+            fontSize: "14px",
+            cursor: "pointer",
+            backgroundColor: "#1e90ff",
+            color: "#fff",
+            border: "none",
+            borderRadius: "4px",
+          }}
+        >
+          Redo
         </button>
       </div>
     </div>
