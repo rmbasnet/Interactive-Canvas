@@ -8,17 +8,36 @@ function CollaborativeCanvas({ color = "#ff4500", isEraser = false }) {
   const undoStackRef = useRef([]);
   const redoStackRef = useRef([]);
   const lastPoint = useRef({ x: 0, y: 0 });
+  const WS_uri = (import.meta.env.VITE_WS_URI || "ws://localhost:8080").trim();
 
   useEffect(() => {
-    socketRef.current = new WebSocket("ws://localhost:8080");
+    const socket = new WebSocket(WS_uri);
+    socketRef.current = socket;
 
-    socketRef.current.onmessage = (event) => {
+    socket.addEventListener("open", () => {
+      console.log("WebSocket connected");
+    });
+
+    socket.addEventListener("error", () => {
+      console.error(
+        "WebSocket connection failed. Start the backend server first with: npm run dev in the backend folder.",
+      );
+    });
+
+    socket.addEventListener("message", (event) => {
       const { x1, y1, x2, y2, color: receivedColor } = JSON.parse(event.data);
       drawLine(x1, y1, x2, y2, receivedColor, false);
-    };
+    });
 
-    return () => socketRef.current.close();
-  }, []);
+    return () => {
+      if (
+        socketRef.current?.readyState === WebSocket.OPEN ||
+        socketRef.current?.readyState === WebSocket.CONNECTING
+      ) {
+        socket.close();
+      }
+    };
+  }, [WS_uri]);
 
   // ---- drawing core -------------------------------------------------
   const drawLine = (x1, y1, x2, y2, color = "#000000", emit = true) => {
