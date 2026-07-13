@@ -5,10 +5,44 @@ function CollaborativeCanvas({ color = "#ff4500", isEraser = false }) {
   const socketRef = useRef(null);
 
   const [isDrawing, setIsDrawing] = useState(false);
+  const [username, setUsername] = useState("");
+  const [showPrompt, setShowPrompt] = useState(false);
   const undoStackRef = useRef([]);
   const redoStackRef = useRef([]);
   const lastPoint = useRef({ x: 0, y: 0 });
   const WS_uri = (import.meta.env.VITE_WS_URI || "ws://localhost:8080").trim();
+
+  // Initialize username from sessionStorage or URL
+  useEffect(() => {
+    const storedUsername = sessionStorage.getItem("username");
+    if (storedUsername) {
+      setUsername(storedUsername);
+      return;
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlUsername = urlParams.get("user");
+    if (urlUsername) {
+      setUsername(urlUsername);
+      sessionStorage.setItem("username", urlUsername);
+      return;
+    }
+    setShowPrompt(true);
+  }, []);
+
+  // Handle username submission
+  const handleUsernameSubmit = (e) => {
+    e.preventDefault();
+    const input = e.target.elements.usernameInput;
+    const value = input.value.trim();
+    if (value) {
+      setUsername(value);
+      sessionStorage.setItem("username", value);
+      // Update URL without reloading
+      const newUrl = `${window.location.pathname}?user=${value}`;
+      window.history.pushState({ path: newUrl }, "", newUrl);
+      setShowPrompt(false);
+    }
+  };
 
   useEffect(() => {
     const socket = new WebSocket(WS_uri);
@@ -165,66 +199,114 @@ function CollaborativeCanvas({ color = "#ff4500", isEraser = false }) {
         marginTop: "20px",
       }}
     >
-      <canvas
-        ref={canvasRef}
-        width={800}
-        height={600}
-        style={{
-          border: "2px solid #333",
-          background: "#fff",
-          cursor: "crosshair",
-        }}
-        onMouseDown={startDrawing}
-        onMouseMove={draw}
-        onMouseUp={stopDrawing}
-        onMouseLeave={stopDrawing}
-      />
-      <div style={{ display: "flex", gap: "10px" }}>
-        <button
-          onClick={clearCanvas}
+      {showPrompt ? (
+        <div
           style={{
-            padding: "8px 16px",
-            fontSize: "14px",
-            cursor: "pointer",
-            backgroundColor: "#ff4500",
-            color: "#fff",
-            border: "none",
-            borderRadius: "4px",
+            // background: "#f0f0f0",
+            padding: "20px",
+            borderRadius: "8px",
+            textAlign: "center",
+            boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
           }}
         >
-          Clear Canvas
-        </button>
+          <h2>Enter your username to start drawing</h2>
+          <form onSubmit={handleUsernameSubmit} style={{ marginTop: "15px" }}>
+            <input
+              type="text"
+              name="usernameInput"
+              placeholder="Choose a username"
+              required
+              style={{
+                padding: "8px",
+                fontSize: "16px",
+                border: "1px solid #ccc",
+                borderRadius: "4px",
+                marginRight: "10px",
+              }}
+            />
+            <button
+              type="submit"
+              style={{
+                padding: "8px 16px",
+                fontSize: "16px",
+                cursor: "pointer",
+                backgroundColor: "#ff4500",
+                color: "#fff",
+                border: "none",
+                borderRadius: "4px",
+              }}
+            >
+              Start Drawing
+            </button>
+          </form>
+        </div>
+      ) : (
+        <>
+          <div style={{ fontWeight: "bold", marginBottom: "10px" }}>
+            Current user: {username}
+          </div>
+          <canvas
+            ref={canvasRef}
+            width={800}
+            height={600}
+            style={{
+              border: "2px solid #333",
+              background: "#fff",
+              cursor: "crosshair",
+            }}
+            onMouseDown={startDrawing}
+            onMouseMove={draw}
+            onMouseUp={stopDrawing}
+            onMouseLeave={stopDrawing}
+          />
+          <div style={{ display: "flex", gap: "10px" }}>
+            <button
+              onClick={clearCanvas}
+              style={{
+                padding: "8px 16px",
+                fontSize: "14px",
+                cursor: "pointer",
+                backgroundColor: "#ff4500",
+                color: "#fff",
+                border: "none",
+                borderRadius: "4px",
+              }}
+            >
+              Clear Canvas
+            </button>
 
-        <button
-          onClick={undoLine}
-          style={{
-            padding: "8px 16px",
-            fontSize: "14px",
-            cursor: "pointer",
-            backgroundColor: "#1e90ff",
-            color: "#fff",
-            border: "none",
-            borderRadius: "4px",
-          }}
-        >
-          Undo
-        </button>
+            <button
+              onClick={undoLine}
+              style={{
+                padding: "8px 16px",
+                fontSize: "14px",
+                cursor: "pointer",
+                backgroundColor: "#1e90ff",
+                color: "#fff",
+                border: "none",
+                borderRadius: "4px",
+              }}
+            >
+              Undo
+            </button>
 
-        <button
-          onClick={redoLine}
-          style={{
-            padding: "8px 16px",
-            fontSize: "14px",
-            cursor: "pointer",
-            backgroundColor: "#1e90ff",
-            color: "#fff",
-            border: "none",
-            borderRadius: "4px",
-          }}
-        >
-          Redo
-        </button>
-      </div>
+            <button
+              onClick={redoLine}
+              style={{
+                padding: "8px 16px",
+                fontSize: "14px",
+                cursor: "pointer",
+                backgroundColor: "#1e90ff",
+                color: "#fff",
+                border: "none",
+                borderRadius: "4px",
+              }}
+            >
+              Redo
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
